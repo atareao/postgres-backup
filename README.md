@@ -12,95 +12,91 @@ Please consider reading detailed the [How the backups folder works?](#how-the-ba
 
 ## Usage
 
-Docker:
-
-```sh
-docker run -u postgres:postgres -e POSTGRES_HOST=postgres -e POSTGRES_DB=dbname -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password  prodrigestivill/postgres-backup-local
-```
 
 Docker Compose:
 
 ```yaml
-version: '3.7'
+version: '3.8'
+
 services:
-    postgres:
-        image: postgres
-        container_name: postgres
-        init: true
-        restart: always
-        environment:
-            - POSTGRES_DB=database
-            - POSTGRES_USER=username
-            - POSTGRES_PASSWORD=password
-    pgbackups:
-        image: prodrigestivill/postgres-backup-local
-        restart: always
-        user: postgres:postgres # Optional: see below
-        volumes:
-            - /var/opt/pgbackups:/backups
-        links:
-            - postgres
-        depends_on:
-            - postgres
-        environment:
-            - POSTGRES_HOST=postgres
-            - POSTGRES_DB=database
-            - POSTGRES_USER=username
-            - POSTGRES_PASSWORD=password
-            - SCHEDULE=@daily
-            - BACKUP_KEEP_DAYS=7
-            - BACKUP_KEEP_WEEKS=4
-            - BACKUP_KEEP_MONTHS=6
-            - HEALTHCHECK_PORT=8080
-```
+  mariabd:
+    container_name: mariadb
+    image: mariadb:latest
+    init: true
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ejemplo
+      MYSQL_USER: usuario
+      MYSQL_PASSWORD: contraseña
+      MYSQL_ROOT_PASSWORD: mypass
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - internal
+    logging:
+      driver: journald
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    networks:
+      - internal
+    ports:
+      - 8080:80
+    environment:
+      - PMA_ARBITRARY=1
+    logging:
+      driver: journald
+  backup:
+    image: atareao/mariadb-backup:latest
+    container_name: backup
+    init: true
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - ./hooks:/hooks
+      - ./backup:/backup
+    environment:
+      MARIADB_DB: ejemplo
+      MARIADB_HOST: mariadb
+      MARIADB_PORT: 3306
+      MARIADB_USER: usuario
+      MARIADB_PASSWORD: contraseña
+      SCHEDULE: "* * 1/24 * * * *"
+      BACKUP_KEEP_MINS: 5
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
 
-For security reasons it is recommended to run it as user `postgres:postgres`.
-
-In case of running as `postgres` user, the system administrator must initialize the permission of the destination folder as follows:
-```sh
-# for default images (debian)
-mkdir -p /var/opt/pgbackups && chown -R 999:999 /var/opt/pgbackups
-# for alpine images
-mkdir -p /var/opt/pgbackups && chown -R 70:70 /var/opt/pgbackups
+volumes:
+  mariadb_data: {}
+networks:
+  internal: {}
 ```
 
 ### Environment Variables
 
-Most variables are the same as in the [official postgres image](https://hub.docker.com/_/postgres/).
-
 | env variable | description |
 |--|--|
-| BACKUP_DIR | Directory to save the backup at. Defaults to `/backups`. |
+| BACKUP_DIR | Directory to save the backup at. Defaults to `/backup`. |
 | BACKUP_SUFFIX | Filename suffix to save the backup. Defaults to `.sql.gz`. |
 | BACKUP_KEEP_DAYS | Number of daily backups to keep before removal. Defaults to `7`. |
 | BACKUP_KEEP_WEEKS | Number of weekly backups to keep before removal. Defaults to `4`. |
 | BACKUP_KEEP_MONTHS | Number of monthly backups to keep before removal. Defaults to `6`. |
 | BACKUP_KEEP_MINS | Number of minutes for `last` folder backups to keep before removal. Defaults to `1440`. |
-| HEALTHCHECK_PORT | Port listening for cron-schedule health check. Defaults to `8080`. |
-| POSTGRES_DB | Comma or space separated list of postgres databases to backup. Required. |
-| POSTGRES_DB_FILE | Alternative to POSTGRES_DB, but with one database per line, for usage with docker secrets. |
-| POSTGRES_EXTRA_OPTS | Additional [options](https://www.postgresql.org/docs/12/app-pgdump.html#PG-DUMP-OPTIONS) for `pg_dump` (or `pg_dumpall` [options](https://www.postgresql.org/docs/12/app-pg-dumpall.html#id-1.9.4.13.6) if POSTGRES_CLUSTER is set). Defaults to `-Z6`. |
-| POSTGRES_CLUSTER | Set to `TRUE` in order to use `pg_dumpall` instead. Also set POSTGRES_EXTRA_OPTS to any value or empty since the default value is not compatible with `pg_dumpall`. |
-| POSTGRES_HOST | Postgres connection parameter; postgres host to connect to. Required. |
-| POSTGRES_PASSWORD | Postgres connection parameter; postgres password to connect with. Required. |
-| POSTGRES_PASSWORD_FILE | Alternative to POSTGRES_PASSWORD, for usage with docker secrets. |
-| POSTGRES_PASSFILE_STORE | Alternative to POSTGRES_PASSWORD in [passfile format](https://www.postgresql.org/docs/12/libpq-pgpass.html#LIBPQ-PGPASS), for usage with postgres clusters. |
-| POSTGRES_PORT | Postgres connection parameter; postgres port to connect to. Defaults to `5432`. |
-| POSTGRES_USER | Postgres connection parameter; postgres user to connect with. Required. |
-| POSTGRES_USER_FILE | Alternative to POSTGRES_USER, for usage with docker secrets. |
-| SCHEDULE | [Cron-schedule](http://godoc.org/github.com/robfig/cron#hdr-Predefined_schedules) specifying the interval between postgres backups. Defaults to `@daily`. |
-| TZ | [POSIX TZ variable](https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html) specifying the timezone used to evaluate SCHEDULE cron (example "Europe/Paris"). |
+| MARIADB_DB | Comma or space separated list of postgres databases to backup. Required. |
+| MARIADB_HOST | MariaDB connection parameter; postgres host to connect to. Required. |
+| MARIADB_PASSWORD | MariaDB connection parameter; postgres password to connect with. Required. |
+| MARIADB_PORT | MariaDB connection parameter; postgres port to connect to. Defaults to `3306`. |
+| MARIADB_USER | MariaDB connection parameter; postgres user to connect with. Required. |
+| SCHEDULE | [tokio-cron-scheduler](https://docs.rs/crate/tokio-cron-scheduler/latest) specifying the interval between postgres backups. Defaults to `0 0 */24 * * * *`. |
 | WEBHOOK_URL | URL to be called after an error or after a successful backup (POST with a JSON payload, check `hooks/00-webhook` file for more info). Default disabled. |
 | WEBHOOK_EXTRA_ARGS | Extra arguments for the `curl` execution in the webhook (check `hooks/00-webhook` file for more info). |
 
 #### Special Environment Variables
 
 This variables are not intended to be used for normal deployment operations:
-
-| env variable | description |
-|--|--|
-| POSTGRES_PORT_5432_TCP_ADDR | Sets the POSTGRES_HOST when the latter is not set. |
-| POSTGRES_PORT_5432_TCP_PORT | Sets POSTGRES_PORT when POSTGRES_HOST is not set. |
 
 ### How the backups folder works?
 
