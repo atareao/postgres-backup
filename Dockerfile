@@ -4,7 +4,7 @@ LABEL maintainer="Lorenzo Carbonell <a.k.a. atareao> lorenzo.carbonell.cerezo@gm
 
 RUN apk add --update \
             --no-cache \
-            mysql-client~=10.6 \
+            postgresql15-client~=15.1 \
             run-parts~=4.11 && \
     rm -rf /var/cache/apk
 

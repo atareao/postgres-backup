@@ -3,13 +3,12 @@ set -eo
 
 HOOKS_DIR="/hooks"
 BACKUP_DIR=${BACKUP_DIR:-/backup}
-SCHEDULE=${SCHEDULE:-0 0 */24 * * * *}
 BACKUP_SUFFIX=${BACKUP_SUFFIX:-.sql.gz}
 KEEP_MINS=${BACKUP_KEEP_MINS:-1440}
 KEEP_DAYS=${BACKUP_KEEP_DAYS:-7}
 BACKUP_KEEP_WEEKS=${BACKUP_KEEP_WEEKS:-4}
 BACKUP_KEEP_MONTHS=${BACKUP_KEEP_MONTHS:-7}
-MARIADB_PORT=${MARIADB_PORT:-3306}
+POSGRES_PORT=${POSGRES_PORT:-5432}
 if [ -d "${HOOKS_DIR}" ]; then
     on_error(){
       run-parts -a "error" "${HOOKS_DIR}"
@@ -17,28 +16,28 @@ if [ -d "${HOOKS_DIR}" ]; then
     trap 'on_error' ERR
 fi
 
-if [ -z "${MARIADB_DB}" ]; then
-    echo "You need to set the MARIADB_DB."
+if [ -z "${POSGRES_DB}" ]; then
+    echo "You need to set the POSGRES_DB."
     exit 1
 fi
 
-if [ -z "${MARIADB_HOST}" ]; then
-    echo "You need to set the MARIADB_HOST environment variable."
+if [ -z "${POSGRES_HOST}" ]; then
+    echo "You need to set the POSGRES_HOST environment variable."
     exit 1
 fi
 
-if [ -z "${MARIADB_USER}" ]; then
-    echo "You need to set the MARIADB_USER."
+if [ -z "${POSGRES_USER}" ]; then
+    echo "You need to set the POSGRES_USER."
     exit 1
 fi
 
-if [ -z "${MARIADB_PASSWORD}" ]; then
-    echo "You need to set the MARIADB_PASSWORD environment variable or link to a container named MARIADB."
+if [ -z "${POSGRES_PASSWORD}" ]; then
+    echo "You need to set the POSGRES_PASSWORD environment variable or link to a container named POSGRES."
     exit 1
 fi
 
 #Process vars
-MARIADB_DBS=$(echo "${MARIADB_DB}" | tr , " ")
+POSGRES_DBS=$(echo "${POSGRES_DB}" | tr , " ")
 
 KEEP_MINS=${BACKUP_KEEP_MINS}
 KEEP_DAYS=${BACKUP_KEEP_DAYS}
@@ -57,7 +56,7 @@ mkdir -p "${BACKUP_DIR}/last/" \
          "${BACKUP_DIR}/monthly/"
 
 #Loop all databases
-for DB in ${MARIADB_DBS}; do
+for DB in ${POSGRES_DBS}; do
     #Initialize filename vers
     LAST_FILENAME="${DB}-$(date +%Y%m%d-%H%M%S)${BACKUP_SUFFIX}"
     DAILY_FILENAME="${DB}-$(date +%Y%m%d)${BACKUP_SUFFIX}"
@@ -68,12 +67,12 @@ for DB in ${MARIADB_DBS}; do
     WFILE="${BACKUP_DIR}/weekly/${WEEKLY_FILENAME}"
     MFILE="${BACKUP_DIR}/monthly/${MONTHY_FILENAME}"
     #Create dump
-    echo "Creating cluster dump of ${DB} database from ${MARIADB_HOST}..."
-    mysqldump --host="$MARIADB_HOST" \
-              --port="$MARIADB_PORT" \
-              --user="$MARIADB_USER" \
-              --password="$MARIADB_PASSWORD" \
-              "$DB" | gzip > "$FILE"
+    echo "Creating cluster dump of ${DB} database from ${POSGRES_HOST}..."
+    pg_dump --host="$POSGRES_HOST" \
+              --port="$POSGRES_PORT" \
+              --username="$POSGRES_USER" \
+              --password="$POSGRES_PASSWORD" \
+              --dbname="$DB" | gzip > "$FILE"
     #Copy (hardlink) for each entry
     if [ -d "${FILE}" ]; then
         DFILENEW="${DFILE}-new"
@@ -109,7 +108,7 @@ for DB in ${MARIADB_DBS}; do
     echo "Point latest monthly backup to this last backup..."
     ln -svf "${MONTHY_FILENAME}" "${BACKUP_DIR}/monthly/${DB}-latest${BACKUP_SUFFIX}"
     #Clean old files
-    echo "Cleaning older files for ${DB} database from ${MARIADB_HOST}..."
+    echo "Cleaning older files for ${DB} database from ${POSGRES_HOST}..."
     find "${BACKUP_DIR}/last" -maxdepth 1 -mmin "+${KEEP_MINS}" -name "${DB}-*${BACKUP_SUFFIX}" -exec rm -rvf '{}' ';'
     find "${BACKUP_DIR}/daily" -maxdepth 1 -mtime "+${KEEP_DAYS}" -name "${DB}-*${BACKUP_SUFFIX}" -exec rm -rvf '{}' ';'
     find "${BACKUP_DIR}/weekly" -maxdepth 1 -mtime "+${KEEP_WEEKS}" -name "${DB}-*${BACKUP_SUFFIX}" -exec rm -rvf '{}' ';'
