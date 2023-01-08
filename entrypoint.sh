@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # -*- coding: utf-8 -*-
 
 # Copyright (c) 2022 Lorenzo Carbonell <a.k.a. atareao>
@@ -23,12 +23,11 @@
 
 # Exit if any command fails
 set -o errexit
-set -o pipefail
 set -o nounset
 
 LOCAL_USER_ID=${LOCAL_USER_ID:-1000}
 LOCAL_GROUP_ID=${LOCAL_GROUP_ID:-1000}
-SCHEDULE=${SCHEDULE:-* * 1/24 * * * *}
+BACKUP_DIR=${BACKUP_DIR:-/backup}
 
 if ! grep -q -E "^dockerus:" /etc/group;
 then
@@ -47,7 +46,7 @@ export CRONTAB=/app/crontab.txt
 echo "${SCHEDULE};/app/backup.sh" > /app/crontab.txt
 
 echo "=== Chown ownership ==="
-chown -R dockerus:dockerus /app /backup /hooks
+chown -R dockerus:dockerus /app "$BACKUP_DIR" /hooks
 
 echo "=== Execute $* ==="
 # comment next line if needs root
