@@ -1,8 +1,15 @@
 #!/bin/sh
-set -Eeo pipefail
+set -eo
 
 HOOKS_DIR="/hooks"
-BACKUP_DIR="/backup"
+BACKUP_DIR=${BACKUP_DIR:-/backup}
+SCHEDULE=${SCHEDULE:-0 0 */24 * * * *}
+BACKUP_SUFFIX=${BACKUP_SUFFIX:-.sql.gz}
+KEEP_MINS=${BACKUP_KEEP_MINS:-1440}
+KEEP_DAYS=${BACKUP_KEEP_DAYS:-7}
+BACKUP_KEEP_WEEKS=${BACKUP_KEEP_WEEKS:-4}
+BACKUP_KEEP_MONTHS=${BACKUP_KEEP_MONTHS:-7}
+MARIADB_PORT=${MARIADB_PORT:-3306}
 if [ -d "${HOOKS_DIR}" ]; then
     on_error(){
       run-parts -a "error" "${HOOKS_DIR}"
@@ -16,13 +23,8 @@ if [ -z "${MARIADB_DB}" ]; then
 fi
 
 if [ -z "${MARIADB_HOST}" ]; then
-    if [ -n "${MARIADB_PORT_3306_TCP_ADDR}" ]; then
-        MARIADB_HOST=${MARIADB_PORT_3306_TCP_ADDR}
-        MARIADB_PORT=${MARIADB_PORT_3306_TCP_PORT}
-    else
-        echo "You need to set the MARIADB_HOST environment variable."
-        exit 1
-    fi
+    echo "You need to set the MARIADB_HOST environment variable."
+    exit 1
 fi
 
 if [ -z "${MARIADB_USER}" ]; then
