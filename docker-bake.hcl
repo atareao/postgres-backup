@@ -7,7 +7,7 @@ variable "REGISTRY_PREFIX" {
 }
 
 variable "IMAGE_NAME" {
-    default = "mariadb-backup"
+    default = "postgres-backup"
 }
 
 target "latest" {
