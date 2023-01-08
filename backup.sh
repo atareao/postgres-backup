@@ -8,7 +8,7 @@ KEEP_MINS=${BACKUP_KEEP_MINS:-1440}
 KEEP_DAYS=${BACKUP_KEEP_DAYS:-7}
 BACKUP_KEEP_WEEKS=${BACKUP_KEEP_WEEKS:-4}
 BACKUP_KEEP_MONTHS=${BACKUP_KEEP_MONTHS:-7}
-POSGRES_PORT=${POSGRES_PORT:-5432}
+POSTGRESQL_PORT=${POSTGRESQL_PORT:-5432}
 if [ -d "${HOOKS_DIR}" ]; then
     on_error(){
       run-parts -a "error" "${HOOKS_DIR}"
@@ -16,28 +16,28 @@ if [ -d "${HOOKS_DIR}" ]; then
     trap 'on_error' ERR
 fi
 
-if [ -z "${POSGRES_DB}" ]; then
-    echo "You need to set the POSGRES_DB."
+if [ -z "${POSTGRESQL_DB}" ]; then
+    echo "You need to set the POSTGRESQL_DB."
     exit 1
 fi
 
-if [ -z "${POSGRES_HOST}" ]; then
-    echo "You need to set the POSGRES_HOST environment variable."
+if [ -z "${POSTGRESQL_HOST}" ]; then
+    echo "You need to set the POSTGRESQL_HOST environment variable."
     exit 1
 fi
 
-if [ -z "${POSGRES_USER}" ]; then
-    echo "You need to set the POSGRES_USER."
+if [ -z "${POSTGRESQL_USER}" ]; then
+    echo "You need to set the POSTGRESQL_USER."
     exit 1
 fi
 
-if [ -z "${POSGRES_PASSWORD}" ]; then
-    echo "You need to set the POSGRES_PASSWORD environment variable or link to a container named POSGRES."
+if [ -z "${POSTGRESQL_PASSWORD}" ]; then
+    echo "You need to set the POSTGRESQL_PASSWORD environment variable or link to a container named POSTGRESQL."
     exit 1
 fi
 
 #Process vars
-POSGRES_DBS=$(echo "${POSGRES_DB}" | tr , " ")
+POSTGRESQL_DBS=$(echo "${POSTGRESQL_DB}" | tr , " ")
 
 KEEP_MINS=${BACKUP_KEEP_MINS}
 KEEP_DAYS=${BACKUP_KEEP_DAYS}
@@ -56,7 +56,7 @@ mkdir -p "${BACKUP_DIR}/last/" \
          "${BACKUP_DIR}/monthly/"
 
 #Loop all databases
-for DB in ${POSGRES_DBS}; do
+for DB in ${POSTGRESQL_DBS}; do
     #Initialize filename vers
     LAST_FILENAME="${DB}-$(date +%Y%m%d-%H%M%S)${BACKUP_SUFFIX}"
     DAILY_FILENAME="${DB}-$(date +%Y%m%d)${BACKUP_SUFFIX}"
@@ -67,12 +67,12 @@ for DB in ${POSGRES_DBS}; do
     WFILE="${BACKUP_DIR}/weekly/${WEEKLY_FILENAME}"
     MFILE="${BACKUP_DIR}/monthly/${MONTHY_FILENAME}"
     #Create dump
-    echo "Creating cluster dump of ${DB} database from ${POSGRES_HOST}..."
-    pg_dump --host="$POSGRES_HOST" \
-              --port="$POSGRES_PORT" \
-              --username="$POSGRES_USER" \
-              --password="$POSGRES_PASSWORD" \
-              --dbname="$DB" | gzip > "$FILE"
+    export PGPASSWORD="$POSTGRESQL_PASSWORD"
+    echo "Creating cluster dump of ${DB} database from ${POSTGRESQL_HOST}..."
+    pg_dump --host="$POSTGRESQL_HOST" \
+            --port="$POSTGRESQL_PORT" \
+            --username="$POSTGRESQL_USER" \
+            --dbname="$DB" | gzip > "$FILE"
     #Copy (hardlink) for each entry
     if [ -d "${FILE}" ]; then
         DFILENEW="${DFILE}-new"
@@ -108,7 +108,7 @@ for DB in ${POSGRES_DBS}; do
     echo "Point latest monthly backup to this last backup..."
     ln -svf "${MONTHY_FILENAME}" "${BACKUP_DIR}/monthly/${DB}-latest${BACKUP_SUFFIX}"
     #Clean old files
-    echo "Cleaning older files for ${DB} database from ${POSGRES_HOST}..."
+    echo "Cleaning older files for ${DB} database from ${POSTGRESQL_HOST}..."
     find "${BACKUP_DIR}/last" -maxdepth 1 -mmin "+${KEEP_MINS}" -name "${DB}-*${BACKUP_SUFFIX}" -exec rm -rvf '{}' ';'
     find "${BACKUP_DIR}/daily" -maxdepth 1 -mtime "+${KEEP_DAYS}" -name "${DB}-*${BACKUP_SUFFIX}" -exec rm -rvf '{}' ';'
     find "${BACKUP_DIR}/weekly" -maxdepth 1 -mtime "+${KEEP_WEEKS}" -name "${DB}-*${BACKUP_SUFFIX}" -exec rm -rvf '{}' ';'

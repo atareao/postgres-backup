@@ -3,8 +3,8 @@
 
 # mariadb-backup
 
-Backup MariaDB to the local filesystem with periodic rotating backups, based on [prodrigestivill/postgres-backup-local]().
-Backup multiple databases from the same host by setting the database names in `MARIADB_DB` separated by commas or spaces.
+Backup PostgreSQL to the local filesystem with periodic rotating backups, based on [prodrigestivill/postgres-backup-local]().
+Backup multiple databases from the same host by setting the database names in `POSGRESQL_DB` separated by commas or spaces.
 
 Supports the following Docker architectures: `linux/amd64`, `linux/arm64`.
 
@@ -19,37 +19,40 @@ Docker Compose:
 version: '3.8'
 
 services:
-  mariabd:
-    container_name: mariadb
-    image: mariadb:latest
+  postgres:
+    container_name: postgres
+    image: postgres:latest
     init: true
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ejemplo
-      MYSQL_USER: usuario
-      MYSQL_PASSWORD: contraseña
-      MYSQL_ROOT_PASSWORD: mypass
-    volumes:
-      - mariadb_data:/var/lib/mysql
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: test_db
     networks:
       - internal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     logging:
       driver: journald
-  phpmyadmin:
-    image: phpmyadmin
-    container_name: phpmyadmin
-    restart: always
+  pgadmin:
+    container_name: pgadmin4
+    image: dpage/pgadmin4
+    init: true
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: atareao@atareao.es
+      PGADMIN_DEFAULT_PASSWORD: root
     networks:
       - internal
+    volumes:
+      - pgadmin:/var/lib/pgadmin
     ports:
-      - 8080:80
-    environment:
-      - PMA_ARBITRARY=1
+      - 5050:80
     logging:
       driver: journald
   backup:
-    image: atareao/mariadb-backup:latest
-    container_name: backup
+    image: atareao/postgres-backup:latest
+    container_name: backup_postgres
     init: true
     restart: unless-stopped
     networks:
@@ -58,21 +61,21 @@ services:
       - ./hooks:/hooks
       - ./backup:/backup
     environment:
-      MARIADB_DB: ejemplo
-      MARIADB_HOST: mariadb
-      MARIADB_PORT: 3306
-      MARIADB_USER: usuario
-      MARIADB_PASSWORD: contraseña
-      SCHEDULE: "* * 1/24 * * * *"
+      POSTGRESQL_DB: test_db
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_USER: root
+      POSTGRESQL_PASSWORD: root
+      SCHEDULE: '0 25 17/24 * * * *'
       BACKUP_KEEP_MINS: 5
       BACKUP_KEEP_DAYS: 7
       BACKUP_KEEP_WEEKS: 4
       BACKUP_KEEP_MONTHS: 6
 
-volumes:
-  mariadb_data: {}
 networks:
   internal: {}
+volumes:
+  postgres_data: {}
+  pgadmin: {}
 ```
 
 ### Environment Variables
@@ -85,11 +88,11 @@ networks:
 | BACKUP_KEEP_WEEKS | Number of weekly backups to keep before removal. Defaults to `4`. |
 | BACKUP_KEEP_MONTHS | Number of monthly backups to keep before removal. Defaults to `6`. |
 | BACKUP_KEEP_MINS | Number of minutes for `last` folder backups to keep before removal. Defaults to `1440`. |
-| MARIADB_DB | Comma or space separated list of postgres databases to backup. Required. |
-| MARIADB_HOST | MariaDB connection parameter; postgres host to connect to. Required. |
-| MARIADB_PASSWORD | MariaDB connection parameter; postgres password to connect with. Required. |
-| MARIADB_PORT | MariaDB connection parameter; postgres port to connect to. Defaults to `3306`. |
-| MARIADB_USER | MariaDB connection parameter; postgres user to connect with. Required. |
+| POSGRESQL_DB | Comma or space separated list of postgres databases to backup. Required. |
+| POSGRESQL_HOST | PostgreSQL connection parameter; postgres host to connect to. Required. |
+| POSGRESQL_PASSWORD | PostgreSQL connection parameter; postgres password to connect with. Required. |
+| POSGRESQL_PORT | PostgreSQL connection parameter; postgres port to connect to. Defaults to `5432`. |
+| POSGRESQL_USER | PostgreSQL connection parameter; postgres user to connect with. Required. |
 | SCHEDULE | [tokio-cron-scheduler](https://docs.rs/crate/tokio-cron-scheduler/latest) specifying the interval between postgres backups. Defaults to `0 0 */24 * * * *`. |
 | WEBHOOK_URL | URL to be called after an error or after a successful backup (POST with a JSON payload, check `hooks/00-webhook` file for more info). Default disabled. |
 | WEBHOOK_EXTRA_ARGS | Extra arguments for the `curl` execution in the webhook (check `hooks/00-webhook` file for more info). |
@@ -143,14 +146,15 @@ By default this container makes daily backups, but you can start a manual backup
 This script as example creates one backup as the running user and saves it the working folder.
 
 ```sh
-docker run --rm -v "$PWD:/backups" -u "$(id -u):$(id -g)" -e POSTGRES_HOST=postgres -e POSTGRES_DB=dbname -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password  prodrigestivill/postgres-backup-local /backup.sh
+docker run --rm --init -v "$PWD/backup:/backup" -v "$PWD/hooks:/hooks" --network postgres_internal -e POSTGRESQL_HOST=postgres -e POSTGRESQL_DB=test_db -e POSTGRESQL_USER=root -e POSTGRESQL_PASSWORD=root atareao/postgres-backup /app/backup.sh
 ```
 
 ### Automatic Periodic Backups
+| SCHEDULE | [tokio-cron-scheduler](https://docs.rs/crate/tokio-cron-scheduler/latest) specifying the interval between postgres backups. Defaults to `0 0 */24 * * * *`. |
 
-You can change the `SCHEDULE` environment variable in `-e SCHEDULE="@daily"` to alter the default frequency. Default is `daily`.
+You can change the `SCHEDULE` environment variable in `-e SCHEDULE="0 0 */24 * * * *"` to alter the default frequency. Default is `0 0 */24 * * * *`.
 
-More information about the scheduling can be found [here](http://godoc.org/github.com/robfig/cron#hdr-Predefined_schedules).
+More information about the scheduling can be found [tokio-cron-scheduler](https://docs.rs/crate/tokio-cron-scheduler/latest).
 
 Folders `daily`, `weekly` and `monthly` are created and populated using hard links to save disk space.
 
@@ -158,18 +162,9 @@ Folders `daily`, `weekly` and `monthly` are created and populated using hard lin
 
 Some examples to restore/apply the backups.
 
-### Restore using the same container
-
-To restore using the same backup container, replace `$BACKUPFILE`, `$CONTAINER`, `$USERNAME` and `$DBNAME` from the following command:
-
-```sh
-docker exec --tty --interactive $CONTAINER /bin/sh -c "zcat $BACKUPFILE | psql --username=$USERNAME --dbname=$DBNAME -W"
-```
-
 ### Restore using a new container
 
 Replace `$BACKUPFILE`, `$VERSION`, `$HOSTNAME`, `$PORT`, `$USERNAME` and `$DBNAME` from the following command:
 
 ```sh
-docker run --rm --tty --interactive -v $BACKUPFILE:/tmp/backupfile.sql.gz postgres:$VERSION /bin/sh -c "zcat /tmp/backupfile.sql.gz | psql --host=$HOSTNAME --port=$PORT --username=$USERNAME --dbname=$DBNAME -W"
-```
+docker run --rm --init -v "$PWD/backup:/backup" -v "$PWD/hooks:/hooks" --network postgres_internal atareao/postgres-backup /bin/sh -c "export PGPASSWORD=root;zcat /backup/last/test_db-20230108-172500.sql.gz | psql --host=postgres --username=root --dbname=postgres"```
