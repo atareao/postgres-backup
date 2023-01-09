@@ -1,7 +1,7 @@
 ![Docker pulls](https://img.shields.io/docker/pulls/prodrigestivill/postgres-backup-local)
 ![GitHub actions](https://github.com/prodrigestivill/docker-postgres-backup-local/actions/workflows/ci.yml/badge.svg?branch=main)
 
-# mariadb-backup
+# postgres-backup
 
 Backup PostgreSQL to the local filesystem with periodic rotating backups, based on [prodrigestivill/postgres-backup-local]().
 Backup multiple databases from the same host by setting the database names in `POSGRESQL_DB` separated by commas or spaces.
