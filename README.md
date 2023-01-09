@@ -65,7 +65,7 @@ services:
       POSTGRESQL_USER: root
       POSTGRESQL_PASSWORD: root
       SCHEDULE: '0 25 17/24 * * * *'
-      BACKUP_KEEP_MINS: 5
+      BACKUP_KEEP_MINS: 1440
       BACKUP_KEEP_DAYS: 7
       BACKUP_KEEP_WEEKS: 4
       BACKUP_KEEP_MONTHS: 6
