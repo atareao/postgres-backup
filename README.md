@@ -144,8 +144,10 @@ By default this container makes daily backups, but you can start a manual backup
 
 This script as example creates one backup as the running user and saves it the working folder.
 
+Replace `$NETWORK`, `$HOSTNAME`, `$PORT`, `$USERNAME`, `$PASSWORD` and `$DBNAME` from the following command:
+
 ```sh
-docker run --rm --init -v "$PWD/backup:/backup" -v "$PWD/hooks:/hooks" --network postgres_internal -e POSTGRESQL_HOST=postgres -e POSTGRESQL_DB=test_db -e POSTGRESQL_USER=root -e POSTGRESQL_PASSWORD=root atareao/postgres-backup /app/backup.sh
+docker run --rm --init -v "$PWD/backup:/backup" -v "$PWD/hooks:/hooks" --network $NETWORK -e POSTGRESQL_HOST=$HOSTNAME -e POSTGRESQL_DB=$DBNAME -e POSTGRESQL_USER=$USERNAME -e POSTGRESQL_PASSWORD=$PASSWORDK atareao/postgres-backup /app/backup.sh
 ```
 
 ### Automatic Periodic Backups
@@ -163,7 +165,7 @@ Some examples to restore/apply the backups.
 
 ### Restore using a new container
 
-Replace `$BACKUPFILE`, `$VERSION`, `$HOSTNAME`, `$PORT`, `$USERNAME` and `$DBNAME` from the following command:
+Replace `$BACKUPFILE`, `$HOSTNAME`, `$PORT`, `$USERNAME`, `$PASSWORD` and `$DBNAME` from the following command:
 
 ```sh
-docker run --rm --init -v "$PWD/backup:/backup" -v "$PWD/hooks:/hooks" --network postgres_internal atareao/postgres-backup /bin/sh -c "export PGPASSWORD=root;zcat /backup/last/test_db-20230108-172500.sql.gz | psql --host=postgres --username=root --dbname=postgres"```
+docker run --rm --init -v "$PWD/backup:/backup" -v "$PWD/hooks:/hooks" --network $NETWORK atareao/postgres-backup /bin/sh -c "export PGPASSWORD=$PASSWORD;zcat /backup/$BACKUPFILE | psql --host=$HOSTNAME --username=$USERNAME --dbname=$DBNAME"```
